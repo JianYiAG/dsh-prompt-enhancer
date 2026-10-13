@@ -1,0 +1,56 @@
+{
+  "name": "@jianyiagi/dsh-prompt-enhancer",
+  "version": "1.0.3",
+  "description": "DSH 提示词增强器：输入框一键优化提示词并写回草稿",
+  "type": "module",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "enhance-core.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.1 <0.4.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "prompt",
+    "prompt-engineering",
+    "composer"
+  ],
+  "author": "jianyiagi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JianYiAG/dsh-prompt-enhancer.git"
+  },
+  "homepage": "https://github.com/JianYiAG/dsh-prompt-enhancer#readme",
+  "bugs": {
+    "url": "https://github.com/JianYiAG/dsh-prompt-enhancer/issues"
+  }
+}

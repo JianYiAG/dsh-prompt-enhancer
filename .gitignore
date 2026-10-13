@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+
+# 本地凭据文件（用模式匹配，不列举具体文件名）
+.*token*
