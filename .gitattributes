@@ -1,0 +1,27 @@
+# 统一换行策略：仓库与 npm 包内一律 LF。
+#
+# 原因：本仓库在 Windows 上开发，默认 core.autocrlf 行为会让工作区文件变成
+# CRLF，而 npm pack 是否归一化取决于工作区状态 —— 同一份源码在不同机器/不同
+# 时刻打包会得到不同字节，破坏「发布产物可复现」与「本地 tgz 等于已发布产物」
+# 这两条验收前提。
+#
+# 因此：文本文件在仓库内与包内都固定为 LF；需要保留 CRLF 的场合（如 .bat/.cmd）
+# 显式标注 eol=crlf。
+
+* text=auto eol=lf
+
+# 二进制/归档：不做任何换行转换
+*.tgz binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Windows 批处理必须保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# PowerShell 脚本按 LF 存储即可
+*.ps1 text eol=lf

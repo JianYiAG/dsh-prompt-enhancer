@@ -1,0 +1,5 @@
+# @jianyiagi/dsh-prompt-enhancer 的 profile 补丁：插入插件行。
+
+- insert:
+    - id: prompt-enhancer
+      name: '@jianyiagi/dsh-prompt-enhancer'
