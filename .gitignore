@@ -4,3 +4,6 @@ node_modules/
 
 # 本地凭据文件（用模式匹配，不列举具体文件名）
 .*token*
+
+# 例外：发版验收证据的原始日志要入库（见 docs/scan-v1.1.0/）
+!docs/scan-v1.1.0/logs/**/*.log
