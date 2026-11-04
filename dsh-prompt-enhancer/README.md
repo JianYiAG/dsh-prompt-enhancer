@@ -35,6 +35,8 @@ CLI 安装后若未生效，在「插件」页勾选该插件，或把包名加�
 
 过短或不含任务目标的输入（例如只有「你我」两个字的片段、或「嗯。」这类只带句号的短句）不会被增强：要么在调用模型前就被拒绝，要么由模型原样透传后识别。两种情况都只在按钮旁显示一行错误提示，草稿保持原样。
 
+**指代型提示词**（如「按照你的建议去执行修改」「按上面的方案执行」）会被正常增强：工具会把指代写成显式表述并补全执行顺序。但增强是**一次性调用、不携带对话历史**，所以它只知道「有一个此前给出的建议」，不知道建议的具体内容——如果那几条建议很关键，把它们写进草稿会更准。若模型仍然原样返回，提示会明确说明是「指代指向上一轮内容，看不到对话历史」，而不是笼统地说缺少任务目标。
+
 也可输入 `/prompt-enhance 提示词`，结果以命令结果行显示，不写回输入框。
 
 > 装了 `@jianyiagi/dsh-plugin-ui-boost`（需要带 `__uiBoostAuxReport` 钩子的版本，当前为 0.5.2+）时，增强调用的**次数与用途**会以「增强」单独统计，不混进对话用量。缓存命中场景下的输入 token 数值以 ui-boost 的口径为准，可能偏低。
@@ -47,7 +49,7 @@ CLI 安装后若未生效，在「插件」页勾选该插件，或把包名加�
 - 过短输入（剥掉标点后 4 个字符以内且无动词特征）会被直接拒绝，「嗯。」这类只带句号的短句也算；这是启发式判断，可能误杀极短的有效提示词（如单个动词），补上对象即可增强。
 - 草稿里带 `@文件` 引用时增强会被拒绝：替换草稿的通道会剥掉引用占位符，引用无法保留。请先发送，或把文件写成文字描述。
 - 长草稿有输出上限：改写结果最多约 16384 token（草稿约 8192 中文字时达到上限）。超过约 4000 字的草稿若被模型大幅扩写，仍可能触发「增强结果超出长度上限」，此时请分段增强。
-- 增强结果会以命令结果行的形式留在会话里：`recordInput: false` 只避免**原文**进入命令入参记录，**改写后的全文仍会写进会话日志**（插件唯一的客户端→宿主通道是命令注册表）。含敏感内容的草稿请勿用于增强。
+- 增强结果会以命令结果行的形式留在会话里：原文不会写进命令入参记录，但**改写后的全文仍会写入会话日志**。含敏感内容的草稿请勿用于增强。
 
 ---
 
@@ -108,6 +110,8 @@ If it does not take effect after a restart, tick the plugin on the Plugins page,
 The button is hidden while the composer is empty.
 
 Drafts that are too short or carry no task goal (for example a bare fragment like 你我, or a short sentence that only adds a full stop like 嗯。) are never enhanced: they are either rejected before the model call or passed through by the model and detected afterwards. Both cases only flash an error next to the button and leave the draft untouched.
+
+**Reference-only drafts** (such as "按照你的建议去执行修改" / "do what you suggested") are enhanced normally: the tool spells the reference out and fills in the execution order. The enhancement is a **single-shot call with no conversation history**, though, so it only knows that a suggestion exists earlier — not what it said. If those details matter, paste them into the draft. Should the model still echo the draft, the message now says the reference points at an earlier turn the call cannot see, instead of the misleading "no task goal".
 
 You can also type `/prompt-enhance <prompt>`; the result appears as a command result line and is not written back to the composer.
 

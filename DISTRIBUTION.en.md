@@ -80,6 +80,7 @@ Both fields are required; remove `config` to use the session model again.
 | Red text next to the button | Error message, disappears after 4 seconds. Check that the model is available and the input is under 24 KB |
 | "too short or no task description" | The draft is too short or carries no task goal; write out what you want and it can be enhanced |
 | "cannot enhance: the draft carries no executable task" | The model judged the draft task-less and left it untouched; add a task and retry |
+| "cannot enhance: the draft refers to an earlier turn …" | The draft points at earlier content ("your suggestion", "the plan above") while the enhancement call carries no conversation history — it knows a suggestion exists but not what it said. Spell the reference out (or restate the key points) and retry |
 | No rollback button after enhancing | It only appears after a successful enhancement while the draft is unedited; the slash command never has one |
 | "the draft has @file references … cancelled" | The draft-replacement channel strips reference chips, so the reference cannot survive; send it first or describe the file in words |
 | "enhancement result exceeds the length limit" | The model expanded a long draft past the output budget; enhance it in parts or pin a model with a larger context |

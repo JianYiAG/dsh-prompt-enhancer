@@ -106,7 +106,7 @@ dsh plugin --profile <profile> add @jianyiagi/dsh-prompt-enhancer
 
 - **回退仅当次会话有效**：回退点存在页面状态里，刷新或重启后失效。
 - **`@文件` 引用会被拒绝**：插件替换草稿的通道会剥掉引用芯片，引用无法保留。草稿含引用时会直接提示取消——请先发送，或用文字描述文件。
-- **增强结果会留在会话里**：结果以命令结果行形式写进会话日志（`recordInput: false` 只避免**原文**进入命令入参记录）。**含敏感内容的草稿请勿用于增强。**
+- **增强结果会留在会话里**：结果以命令结果行形式写进会话日志（原文不会进入命令入参记录）。**含敏感内容的草稿请勿用于增强。**
 - **长草稿有输出上限**：改写结果上限约 16384 token（约 8192 中文字草稿时达到）。超过约 4000 字的草稿若被大幅扩写，仍可能提示「增强结果超出长度上限」——请分段增强。
 - **斜杠命令无回退按钮**：其结果不写回输入框。
 
@@ -149,7 +149,7 @@ dsh plugin --profile <profile> remove @jianyiagi/dsh-prompt-enhancer
 
 ## 变更记录
 
-见 **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**。当前版本 **1.1.0**。
+见 **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**。当前版本 **1.1.1**。
 
 ---
 

@@ -18,7 +18,7 @@ export const SYSTEM_PROMPT = [
   '5. 简洁优先：不重复表述，同一个词语不在句中反复出现，能合并的合并；为了清晰和可执行可以展开，但不要堆砌空话，改写后的长度不要超过原文两倍加 80 字。',
   '6. 不写占位：原文没有的信息直接省略，禁止输出「未指定」「未提供」「未明确」之类的占位文字。',
   '7. 原样保留：涉及代码、命令、路径、变量名、字段名等内容时原样保留，不要改写或翻译；文档、报告、文件名可以用《》标注。',
-  '8. 无法增强时透传：若原文不包含可执行的任务目标（仅为词语、人名、无动作的片段或内容过短），不要为其编造任务，原样输出原文。',
+  '8. 无法增强时透传：只有当原文完全没有可执行的任务（仅为词语、人名、寒暄感叹，或没有任何动作与对象的零散片段）时，才原样输出原文，不要为其编造任务。若原文已经包含明确动作，只是动作的对象或依据靠指代（例如「你的建议」「刚才说的」「上面的方案」「按计划」），这属于可增强的指令，不要原样输出：把指代写成显式表述（如「你此前给出的建议」「上一条回复中的方案」），补全执行顺序（先确认范围，再逐项落实，最后说明结果）与交付要求。人称保持不变（原文的「你」不得改写成「我」），也不得借此编造原文没有的具体对象、文件、路径或技术栈。',
   '9. 补全可推导维度：把原文中抽象、笼统的执行对象展开为由任务类型必然得出的通用维度（例如"找出 bug"可展开为逻辑错误、边界情况、异常处理缺失、资源泄漏、依赖冲突），并可为交付物写明字段结构（例如问题所在位置、触发条件、影响程度、根因、修复方向）。这类补全不视为编造。但不得引入原文没有的具体对象、人员、工具、路径、技术栈或项目事实，也不得为了凑长度重复堆砌。',
   '',
   '输出要求：只输出改写后的提示词本体，不要解释、前言、后缀，不要使用 Markdown 代码围栏或其他包装。',
@@ -202,6 +202,54 @@ export function isPassthrough(draft, output) {
   // padding, never added content.
   const remainder = result.slice(0, at) + result.slice(at + source.length);
   return PASSTHROUGH_EDGE_RE.test(remainder);
+}
+
+/**
+ * Phrases that point at content from an earlier turn instead of stating it.
+ *
+ * The enhancement call is a **single-shot auxiliary call**: it sends the system
+ * instruction plus the draft, and no conversation history, so a draft whose
+ * task object is only a reference ("按照你的建议去执行修改") reaches the model
+ * with nothing to bind the reference to. Principle 8 used to treat that as
+ * "no task goal" and echo the draft, which the host then reported as "原文缺少
+ * 可执行的任务目标" — a wrong diagnosis, because the draft does have an action
+ * (执行修改); what it lacks is the referent.
+ *
+ * This list exists only to **name that failure accurately** when the model
+ * still echoes. It is not a gate and never blocks a call: closing the list
+ * would misreport the long tail as "no task goal" again, which is exactly the
+ * misleading message this replaced.
+ */
+const DEICTIC_PHRASES = [
+  // Possessive reference to what the assistant said.
+  '你的建议', '你的方案', '你的思路', '你的意见', '你的想法', '你的回复', '你的分析', '你的结论',
+  '您的建议', '您的方案', '您的思路', '您的意见', '您的想法',
+  '你刚才', '你之前', '你上面', '你此前', '你说的', '你提的', '你给的', '你推荐的', '你列出的',
+  '你上一条', '你上轮', '你上一轮',
+  // Demonstrative reference to an earlier artifact.
+  '上面的建议', '上面的方案', '上面的思路', '上面的意见', '上面的分析', '上面的结论',
+  '上述建议', '上述方案', '上述思路', '上述意见', '上述分析', '上述结论',
+  '刚才说', '刚才提', '刚才讲', '前面说', '前面提', '前面讲', '此前说', '此前提',
+  '上一条', '上一条回复', '上一轮', '上轮', '上一版',
+  // Reference to a plan or prior agreement.
+  '按计划', '按原计划', '照计划', '按既定方案', '按这个方案', '按那个方案', '按该方案',
+  '照你说的', '照你上面', '照旧', '如上所述', '按上述',
+];
+
+/**
+ * Whether a draft refers to an earlier turn instead of naming its object.
+ *
+ * Used only to pick the error message after the model echoed the draft, so a
+ * false positive costs a slightly wrong sentence, never a blocked call or a
+ * modified draft. Latin drafts are matched on their own short list because the
+ * same failure shows up as "do what you suggested".
+ */
+const DEICTIC_EN_RE = /\b(your (?:suggestion|plan|idea|advice|proposal|approach|recommendation)|what you (?:said|suggested|mentioned|proposed)|the (?:plan|suggestion|approach) above|as discussed|as you suggested|previous (?:reply|response|message)|\bthe above (?:plan|suggestion))\b/i;
+
+export function hasDeicticReference(draft) {
+  if (typeof draft !== 'string') return false;
+  if (DEICTIC_EN_RE.test(draft)) return true;
+  return DEICTIC_PHRASES.some((phrase) => draft.includes(phrase));
 }
 
 /**

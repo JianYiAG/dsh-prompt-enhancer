@@ -20,6 +20,7 @@ import {
   resolvePinnedRoute,
   isEnhanceable,
   isPassthrough,
+  hasDeicticReference,
   outputTokenBudget,
 } from './enhance-core.js';
 
@@ -167,10 +168,19 @@ export function apply(ctx, config) {
         return { kind: 'error', text: `增强中断：${terminal.message}` };
       }
       if (text === '') return { kind: 'error', text: '模型未返回增强结果' };
-      // The model echoed a task-less draft instead of inventing a task for it
-      // (SYSTEM_PROMPT principle 8): report "cannot enhance" and leave the
-      // composer draft untouched.
+      // The model echoed the draft instead of enhancing it. Two different
+      // causes used to share one message, and the message named the wrong one:
+      // a draft whose object is a reference ("按照你的建议去执行修改") has a
+      // real action, so telling the user "缺少可执行的任务目标" sends them into
+      // a retry loop that cannot work. The remedy differs per cause — restate
+      // the referent vs. add a task — so the text must differ too.
       if (isPassthrough(draft, text)) {
+        if (hasDeicticReference(draft)) {
+          return {
+            kind: 'error',
+            text: '无法增强：原文用指代（如「你的建议」「上面的方案」「刚才说的」）指向上一轮内容，而增强调用看不到对话历史，无法确定具体要做什么；请把指代写成具体内容后重试',
+          };
+        }
         return { kind: 'error', text: '无法增强：原文缺少可执行的任务目标，未做改动' };
       }
       return { kind: 'success', text };

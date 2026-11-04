@@ -107,7 +107,7 @@ Inputs with no actual task are never padded into a fake one. Both cases behave t
 
 - **Rollback is session-scoped**: the restore point lives in page state and is lost on refresh or restart.
 - **`@file` references are refused**: the draft-replacement channel strips reference chips, so they cannot survive. A draft containing them is cancelled with a message — send it first, or describe the file in words.
-- **The result stays in the session**: it is written to the session log as a command result line (`recordInput: false` only keeps the **original** out of the command input record). **Do not enhance drafts containing secrets.**
+- **The result stays in the session**: it is written to the session log as a command result line (the original text is not added to the command input record). **Do not enhance drafts containing secrets.**
 - **Long drafts hit an output ceiling**: the rewrite is capped at about 16 384 tokens (reached at roughly 8 192 Chinese characters of draft). A draft over ~4 000 characters that the model expands substantially can still end in "enhancement result exceeds the length limit" — enhance it in parts.
 - **The slash command has no rollback button**: its result is not written back to the composer.
 
@@ -150,7 +150,7 @@ dsh plugin --profile <profile> remove @jianyiagi/dsh-prompt-enhancer
 
 ## Changelog
 
-See **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**. Current version **1.1.0**.
+See **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**. Current version **1.1.1**.
 
 ---
 
