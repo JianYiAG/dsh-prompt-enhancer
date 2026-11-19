@@ -7,9 +7,12 @@
  * host `/prompt-enhance` command and replaces the whole draft with the
  * returned text through the standard `inputActions.setDraft` face.
  *
- * After a successful enhancement a rollback button appears next to it and
- * restores the pre-enhancement draft; it disappears as soon as the draft is
- * edited by hand or cleared (message sent).
+ * After a successful enhancement the enhance button is REPLACED by a rollback
+ * button that restores the pre-enhancement draft. The two never coexist: while
+ * a rollback point is live the draft already holds enhanced text, so a second
+ * enhance click would be an unrequested re-run. Rollback disappears as soon as
+ * the draft is edited by hand or cleared (message sent), which brings the
+ * enhance button back.
  */
 window.__ModuleLoader__.load({
   id: '@jianyiagi/dsh-prompt-enhancer',
@@ -131,11 +134,25 @@ window.__ModuleLoader__.load({
       // Synchronous in-flight latch. `busy` only takes effect on the next
       // render, so a second click in the same frame still reads `busy === false`.
       const busyRef = React.useRef(false);
+      // Set right before the plugin itself calls `setDraft`, so the edit tracker
+      // below can tell its own write-back from a user edit.
+      const pluginWrite = React.useRef(false);
+      const lastDraft = React.useRef(draft);
       React.useEffect(() => () => window.clearTimeout(errorTimer.current), []);
-      // Draft cleared (message sent): drop the rollback point.
+      // Any edit that did not come from this component discards the rollback
+      // point permanently. Comparing text alone was not enough: editing the
+      // draft and typing the enhanced text back restored a stale point that
+      // offered to "restore" an original the user had already moved past.
       React.useEffect(() => {
-        if (draft.trim() === '') setRollback(null);
-      }, [draft]);
+        const previous = lastDraft.current;
+        lastDraft.current = draft;
+        if (previous === draft) return;
+        if (pluginWrite.current) {
+          pluginWrite.current = false;
+          return;
+        }
+        if (rollback !== null) setRollback(null);
+      }, [draft, rollback]);
       if (draft.trim() === '') return null;
       const flashError = (message) => {
         setError(message);
@@ -184,6 +201,7 @@ window.__ModuleLoader__.load({
             flashError(t('error.changed'));
             return;
           }
+          pluginWrite.current = true;
           inputActions.setDraft(text);
           setRollback({ original, enhanced: text });
         } catch (thrown) {
@@ -201,7 +219,18 @@ window.__ModuleLoader__.load({
         error === '' ? null : h('span', {
           key: 'pe-error', className: 'pe-error', role: 'status',
         }, error),
-        h('button', {
+        // The two buttons are MUTUALLY EXCLUSIVE. While a rollback point is
+        // live the draft already holds the enhanced text, so an enhance button
+        // next to it is a second call the user did not ask for: a misclick
+        // re-runs the model on its own output, spending another call and
+        // rewriting text that was already accepted. Hiding it leaves exactly
+        // one action in the row, and the way back to a fresh enhancement is
+        // the rollback button itself (restore the original → canRollback turns
+        // false → the enhance button returns). `busy` also routes here: an
+        // in-flight call already has its rollback point pending, and showing
+        // the spinner in the rollback slot keeps one button on screen instead
+        // of two.
+        canRollback || busy ? null : h('button', {
           key: 'pe-button',
           type: 'button',
           className: 'pe-button',
@@ -211,19 +240,21 @@ window.__ModuleLoader__.load({
           onMouseDown: (event) => event.preventDefault(),
           onClick,
         }, busy ? SPINNER : ICON),
-        canRollback ? h('button', {
+        canRollback || busy ? h('button', {
           key: 'pe-rollback',
           type: 'button',
           className: 'pe-button',
-          title: t('rollback.title'),
-          'aria-label': t('rollback.title'),
+          title: busy ? t('button.title') : t('rollback.title'),
+          'aria-label': busy ? t('button.title') : t('rollback.title'),
           disabled: busy,
           onMouseDown: (event) => event.preventDefault(),
           onClick: () => {
+            if (busy) return;
+            pluginWrite.current = true;
             inputActions.setDraft(rollback.original);
             setRollback(null);
           },
-        }, ROLLBACK_ICON) : null,
+        }, busy ? SPINNER : (canRollback ? ROLLBACK_ICON : null)) : null,
       );
     }
 

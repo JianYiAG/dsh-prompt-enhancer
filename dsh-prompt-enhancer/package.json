@@ -1,6 +1,6 @@
 {
   "name": "@jianyiagi/dsh-prompt-enhancer",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "DSH 提示词增强器：输入框一键优化提示词并写回草稿",
   "type": "module",
   "icon": "./icon.svg",
@@ -13,6 +13,7 @@
   "files": [
     "index.js",
     "enhance-core.js",
+    "prompt.js",
     "client.js",
     "cordis.patch.yml",
     "icon.svg",
@@ -25,6 +26,9 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-commands": ">=0.2.0-rc.1 <0.3.0",
     "@deepseek-ai/dsh-llm": ">=0.2.0-rc.1 <0.3.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
   },
   "engines": {
     "node": ">=20.3"

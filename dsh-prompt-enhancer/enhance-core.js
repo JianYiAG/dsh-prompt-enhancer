@@ -6,24 +6,6 @@
  * stream.
  */
 
-/** Built-in enhancement instruction (not configurable). */
-export const SYSTEM_PROMPT = [
-  '你是提示词工程专家。请对用户给出的提示词做优化与结构化改写，让它更清晰、更完整、更容易被执行。',
-  '',
-  '改写原则：',
-  '1. 优化表达：消除歧义和口语化说法，明确任务目标、对象、约束与期望输出。',
-  '2. 忠于原意：保留原有意图与语言，不编造原文没有的事实、数据与项目信息（中文进中文出，英文进英文出）。',
-  '3. 显式化：把原文隐含的动作、对象和执行顺序写清楚；包含多个步骤时按顺序分句组织（先……再……然后……），不要强行合并成一句。',
-  '4. 保持人类可读：一律用自然流畅的段落或短句表达，禁止使用小标题分节；读起来要像人写的需求说明。',
-  '5. 简洁优先：不重复表述，同一个词语不在句中反复出现，能合并的合并；为了清晰和可执行可以展开，但不要堆砌空话，改写后的长度不要超过原文两倍加 80 字。',
-  '6. 不写占位：原文没有的信息直接省略，禁止输出「未指定」「未提供」「未明确」之类的占位文字。',
-  '7. 原样保留：涉及代码、命令、路径、变量名、字段名等内容时原样保留，不要改写或翻译；文档、报告、文件名可以用《》标注。',
-  '8. 无法增强时透传：只有当原文完全没有可执行的任务（仅为词语、人名、寒暄感叹，或没有任何动作与对象的零散片段）时，才原样输出原文，不要为其编造任务。若原文已经包含明确动作，只是动作的对象或依据靠指代（例如「你的建议」「刚才说的」「上面的方案」「按计划」），这属于可增强的指令，不要原样输出：把指代写成显式表述（如「你此前给出的建议」「上一条回复中的方案」），补全执行顺序（先确认范围，再逐项落实，最后说明结果）与交付要求。人称保持不变（原文的「你」不得改写成「我」），也不得借此编造原文没有的具体对象、文件、路径或技术栈。',
-  '9. 补全可推导维度：把原文中抽象、笼统的执行对象展开为由任务类型必然得出的通用维度（例如"找出 bug"可展开为逻辑错误、边界情况、异常处理缺失、资源泄漏、依赖冲突），并可为交付物写明字段结构（例如问题所在位置、触发条件、影响程度、根因、修复方向）。这类补全不视为编造。但不得引入原文没有的具体对象、人员、工具、路径、技术栈或项目事实，也不得为了凑长度重复堆砌。',
-  '',
-  '输出要求：只输出改写后的提示词本体，不要解释、前言、后缀，不要使用 Markdown 代码围栏或其他包装。',
-].join('\n');
-
 /** Largest draft the command accepts (bytes). */
 export const MAX_INPUT_BYTES = 24576;
 /** Smallest enhancement-result budget handed to the model (tokens). */
@@ -152,7 +134,7 @@ export function isEnhanceable(draft) {
  * Punctuation, whitespace and inline decoration ignored when comparing draft
  * and echo.
  *
- * Book-title marks are deliberately *excluded*: SYSTEM_PROMPT principle 7 tells
+ * Book-title marks are deliberately *excluded*: the `verbatim` rule tells
  * the model to mark document names with 《》, so wrapping a name is a real (if
  * small) edit and must not be reported as "cannot enhance".
  *
@@ -176,7 +158,7 @@ const PASSTHROUGH_EDGE_RE = /^[请吧呢啊呀哦嘛的了。.，,]*$/;
 /**
  * Whether the model echoed the original instead of enhancing it.
  *
- * SYSTEM_PROMPT principle 8 tells the model to pass through drafts that
+ * the `passthrough` rule tells the model to pass through drafts that
  * carry no task goal rather than invent one; the host treats that echo as
  * "cannot enhance" so the composer keeps the user's text.
  *
@@ -210,7 +192,7 @@ export function isPassthrough(draft, output) {
  * The enhancement call is a **single-shot auxiliary call**: it sends the system
  * instruction plus the draft, and no conversation history, so a draft whose
  * task object is only a reference ("按照你的建议去执行修改") reaches the model
- * with nothing to bind the reference to. Principle 8 used to treat that as
+ * with nothing to bind the reference to. The `passthrough` rule used to treat that as
  * "no task goal" and echo the draft, which the host then reported as "原文缺少
  * 可执行的任务目标" — a wrong diagnosis, because the draft does have an action
  * (执行修改); what it lacks is the referent.
@@ -353,9 +335,69 @@ function stripPreamble(text) {
   return text.replace(PREAMBLE_RE, '');
 }
 
-/** Normalize raw model output into replacement draft text; `''` when unusable. */
-export function normalizeEnhancedText(raw) {
+/** A Markdown heading line (`## 任务`), not a `#` inside a code block's prose. */
+export function hasHeading(text) {
+  return typeof text === 'string' && /^#{1,6}[ \t]+\S/m.test(text);
+}
+
+/** Whether the text carries a block-level fenced span. */
+export function hasBlockFence(text) {
+  return typeof text === 'string' && BLOCK_FENCE_RE.test(text);
+}
+
+/**
+ * Placeholder tokens the draft expects to survive verbatim.
+ *
+ * Bracket placeholders (`[模块]`, `[可观察的结果]`) and template variables
+ * (`{{name}}`) are the two shapes the framework template and ordinary prompts
+ * use. Markdown link text (`[docs](url)`) is excluded: the bracket there is
+ * syntax, and rewriting the link label is normal editing.
+ */
+const PLACEHOLDER_RE = /\[[^\[\]\n()]{1,40}\](?!\()|\{\{[^{}\n]{1,40}\}\}/g;
+
+export function extractPlaceholders(text) {
+  if (typeof text !== 'string') return [];
+  return [...new Set(text.match(PLACEHOLDER_RE) ?? [])];
+}
+
+/**
+ * Structural diff between draft and rewrite: what was kept, dropped or added.
+ *
+ * Used by the offline checker and the scorer. It reports rather than throws, so
+ * a legitimate rewrite that reflows headings does not have to be a violation.
+ */
+export function diffStructure(input, output) {
+  const inText = typeof input === 'string' ? input : '';
+  const outText = typeof output === 'string' ? output : '';
+  const inVars = extractPlaceholders(inText);
+  const outVars = extractPlaceholders(outText);
+  return {
+    fences: { kept: hasBlockFence(inText) && hasBlockFence(outText), added: !hasBlockFence(inText) && hasBlockFence(outText), lost: hasBlockFence(inText) && !hasBlockFence(outText) },
+    headings: { kept: hasHeading(inText) && hasHeading(outText), added: !hasHeading(inText) && hasHeading(outText), lost: hasHeading(inText) && !hasHeading(outText) },
+    variables: {
+      kept: inVars.filter((token) => outVars.includes(token)),
+      dropped: inVars.filter((token) => !outVars.includes(token)),
+      added: outVars.filter((token) => !inVars.includes(token)),
+    },
+  };
+}
+
+/**
+ * Normalize raw model output into replacement draft text; `''` when unusable.
+ *
+ * `options.input` is the draft the answer rewrites. When the draft itself
+ * carries a fenced block or heading, packaging is part of the content: the
+ * answer keeps its fence instead of being unwrapped (a code-block prompt would
+ * otherwise be written back without its delimiters, or truncated to its first
+ * block). With no input, or an input without structure, the old unwrapping
+ * behaviour applies unchanged.
+ */
+export function normalizeEnhancedText(raw, options = {}) {
   if (typeof raw !== 'string') return '';
+  const input = options.input;
+  if (typeof input === 'string' && (hasBlockFence(input) || hasHeading(input))) {
+    return stripPreamble(raw.trim()).trim();
+  }
   return stripPreamble(stripFence(raw)).trim();
 }
 
@@ -428,42 +470,55 @@ export function resolveRoute(ctx, agent) {
 export const PLACEHOLDER_WORDS = ['未指定', '未提供', '未明确', '待补充', 'TODO', 'TBD'];
 
 /**
- * Largest output/input length ratio outside the fixed slack.
+ * Length ceiling for one draft.
  *
- * SYSTEM_PROMPT principle 9 lets the model expand an abstract target into the
- * generic dimensions that follow from the task type ("find bugs" → logic
- * errors / edge cases / missing error handling / leaks / dependency
- * conflicts) and spell out the report fields. That is legitimate but costs
- * length, and the cost is *fixed*: listing five dimensions and five fields
- * spends roughly the same 90 characters whether the draft is 20 characters or
- * 400. A pure ratio therefore over-penalises short drafts and under-penalises
- * long ones, so the budget is `MAX_GROWTH_RATIO × input + GROWTH_ABSOLUTE_SLACK`.
- *
- * Calibrated against the observed pairs: the spec-style reference (21 → 114)
- * needs at least 2× + 75, while a padded rewrite (52 → 208) must still be
- * rejected, which caps the slack below 26 at ratio 3.5 — no pure-ratio model
- * separates them. 2× + 80 fits every faithful sample with headroom (the
- * reference uses 93% of its budget) and rejects the padded one at 113%.
- * Measured on characters, not bytes.
+ * Chinese-led drafts are measured in characters (`2x + 80`, floored at 220);
+ * Latin-led drafts are measured in words (`2w + 30`, floored at 80), because a
+ * character ratio punishes English by roughly four times. The floor is a safety
+ * net, not a target: observed outputs sit near 124 characters / 50 words.
  */
-export const MAX_GROWTH_RATIO = 2;
+export const BUDGET_MIN_CHARS = 220;
+export const BUDGET_MIN_WORDS = 80;
+
+/** Whitespace-free text, the measurement unit for the character budget. */
+export function compactText(text) {
+  return typeof text === 'string' ? text.replace(/\s+/g, '') : '';
+}
+
+/** Latin words, used as the unit for Latin-led drafts. */
+export function countLatinWords(text) {
+  return typeof text === 'string' ? (text.match(/[A-Za-z][A-Za-z0-9_'.-]*/g) ?? []).length : 0;
+}
 
 /**
- * Fixed character allowance on top of `MAX_GROWTH_RATIO`.
+ * Budget for one draft: characters for Chinese-led, words for Latin-led.
  *
- * Covers the fixed cost of spelling out derivable dimensions, so the cap
- * measures inflation rather than specification. See `MAX_GROWTH_RATIO`.
+ * `input` is the measured size of the draft in the same unit, so callers can
+ * report the baseline alongside the ceiling.
  */
-export const GROWTH_ABSOLUTE_SLACK = 80;
+export function budgetFor(draft) {
+  const text = typeof draft === 'string' ? draft : '';
+  if (isChineseText(text)) {
+    const length = compactText(text).length;
+    return { kind: 'chars', input: length, limit: Math.max(length * 2 + 80, BUDGET_MIN_CHARS) };
+  }
+  const words = countLatinWords(text);
+  return { kind: 'words', input: words, limit: Math.max(words * 2 + 30, BUDGET_MIN_WORDS) };
+}
 
-/**
- * Shortest input the growth cap applies to (characters, whitespace removed).
- *
- * A terse draft has to grow to become executable — "把那个报告看完然后干活"
- * (11 chars) legitimately becomes 23 — so the ratio is only meaningful once
- * the draft already carries enough content to enhance rather than supply.
- */
-export const MIN_GROWTH_CHECK_CHARS = 20;
+export function exceedsBudget(draft, output) {
+  const budget = budgetFor(draft);
+  if (budget.kind === 'chars') return compactText(output).length > budget.limit;
+  return countLatinWords(output) > budget.limit;
+}
+
+/** The sentence injected into the system prompt for this draft. */
+export function budgetInstruction(draft) {
+  const budget = budgetFor(draft);
+  return budget.kind === 'chars'
+    ? `不超过 ${budget.limit} 字`
+    : `不超过 ${budget.limit} 个英文单词`;
+}
 
 /**
  * Literals that must survive enhancement verbatim: Windows paths, posix-ish
@@ -481,7 +536,7 @@ function extractLiterals(input) {
 /**
  * Project-specific tokens a spec-style rewrite must not invent.
  *
- * Principle 9 permits generic dimensions but forbids project facts. The only
+ * The `derivable` rule permits generic dimensions but forbids project facts. The only
  * mechanically detectable shape of those facts in a prompt is a concrete
  * token: an absolute path, a code span, or a dotted identifier. A derived
  * dimension ("边界情况") never looks like one, so anything here that is absent
@@ -520,7 +575,7 @@ const CJK_SHARE_THRESHOLD = 0.1;
 /** CJK characters that make a text Chinese-led even when Latin dominates. */
 const CJK_MIN_CHARS = 2;
 
-function isChineseText(text) {
+export function isChineseText(text) {
   const cjk = (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
   const latin = (text.match(/[A-Za-z]/g) ?? []).length;
   if (cjk < CJK_MIN_CHARS) return false;
@@ -528,30 +583,74 @@ function isChineseText(text) {
 }
 
 /**
+ * Whether the rewrite handed the draft's roles to the other side.
+ *
+ * The enhanced text is an instruction addressed to the assistant, so the
+ * draft's 「我」 is the user and its 「你」 is the assistant. A rewrite that makes
+ * 「你」 the one who intends the work, and 「我」 the one who advises, has inverted
+ * the instruction. Measured on one 16-character draft, 2 of 4 recorded runs did
+ * exactly that — and none of them tripped any other rule, which is why this
+ * check exists.
+ *
+ * Deliberately narrow. It fires only when the draft ITSELF states both roles
+ * with those meanings (writer intends + reader advises), so a faithful rewrite
+ * that merely happens to use both pronouns is untouched. Inside that shape it
+ * looks for either half of the swap, because a swapped sentence often leaves
+ * one side intact ("请说明你要新增的功能……我会据此梳理实现方案" keeps 「我」
+ * giving the advice). Being a closed-shape check is the point: a broader
+ * pronoun heuristic would fire on ordinary collaborative drafts.
+ *
+ * Like every rule here it is a regression guard for the test suite, not a
+ * runtime gate.
+ */
+const DRAFT_WRITER_INTENT_RE = /我[^。！？\n]{0,6}(?:想要|想|要|准备|打算|计划|需要)/;
+const DRAFT_READER_ADVICE_RE = /你[^。！？\n]{0,6}(?:给|提|说|出|拿)[^。！？\n]{0,4}(?:意见|建议|看法|方案|主意)/;
+const OUTPUT_READER_INTENT_RE = /(?:^|[。；！？\n，,、：:\s])(?:你|您)[^。！？\n]{0,4}(?:想要|想|要|准备|打算|计划|需要)/;
+const OUTPUT_WRITER_ADVICE_RE = /我[^。！？\n]{0,10}(?:给出|分析|梳理|判断|评估|建议|谋划)/;
+
+/**
+ * @param draft - the text the user submitted.
+ * @param output - the enhancement result.
+ * @returns whether the two roles were exchanged.
+ */
+export function hasRoleInversion(draft, output) {
+  if (typeof draft !== 'string' || typeof output !== 'string') return false;
+  if (!DRAFT_WRITER_INTENT_RE.test(draft) || !DRAFT_READER_ADVICE_RE.test(draft)) return false;
+  return OUTPUT_READER_INTENT_RE.test(output) || OUTPUT_WRITER_ADVICE_RE.test(output);
+}
+
+/**
  * Hard-rule checker for one enhancement result.
  *
  * These are format rules, not a style verdict: they run in the test suite to
  * keep regressions out, and they cannot judge whether a derived dimension was
- * worth adding (principle 9 owns that call).
+ * worth adding (the `derivable` rule owns that call).
  * @returns violation messages; empty array means every hard rule passed.
  */
 export function checkEnhancedText(input, output) {
   const violations = [];
+  if (hasRoleInversion(input, output)) {
+    violations.push('输出把原文的主体与受话方互换了（谁提需求 / 谁给意见颠倒）');
+  }
   for (const literal of extractLiterals(input)) {
     if (!output.includes(literal)) violations.push(`原文片段未原样保留：${literal}`);
+  }
+  for (const token of extractPlaceholders(input)) {
+    if (!output.includes(token)) violations.push(`原文占位未原样保留：${token}`);
   }
   for (const word of PLACEHOLDER_WORDS) {
     if (output.includes(word) && !input.includes(word)) violations.push(`输出含占位文字：${word}`);
   }
-  if (output.trim().startsWith('```') || /(?:^|\n)[ \t]*```/.test(output)) {
+  // A fence or heading the draft already carries is content, not packaging: only
+  // an ADDED one is a violation. Without this, a code-block prompt or a headed
+  // template could never be rewritten faithfully.
+  const outputFenced = output.trim().startsWith('```') || /(?:^|\n)[ \t]*```/.test(output);
+  if (outputFenced && !hasBlockFence(input)) {
     violations.push('输出被代码围栏包裹');
   }
-  if (/^#{1,6}\s/m.test(output)) violations.push('输出含 Markdown 标题行');
-  const compactInput = input.replace(/\s+/g, '');
-  const compactOutput = output.replace(/\s+/g, '');
-  if (compactInput.length >= MIN_GROWTH_CHECK_CHARS
-    && compactOutput.length > compactInput.length * MAX_GROWTH_RATIO + GROWTH_ABSOLUTE_SLACK) {
-    violations.push(`输出长度超出增长预算（原文 ${MAX_GROWTH_RATIO} 倍 + ${GROWTH_ABSOLUTE_SLACK} 字）`);
+  if (hasHeading(output) && !hasHeading(input)) violations.push('输出含 Markdown 标题行');
+  if (exceedsBudget(input, output)) {
+    violations.push('输出长度超出本次上限');
   }
   for (const token of extractProjectTokens(output)) {
     if (!input.includes(token)) violations.push(`输出新增了原文没有的项目信息：${token}`);

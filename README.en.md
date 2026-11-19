@@ -43,6 +43,10 @@ after    Rescan every file in the current workspace and systematically look for
 
 But it **invents nothing**: no objects, people, tools, paths, tech stacks or project facts you did not mention. Information the original does not contain is left out rather than fabricated.
 
+Dimensions are picked **by task type**, never all at once: bug-fix drafts get reproduction and verification, retrospectives get a timeline and common cause, change requests get touched files and a rollback path — at most 2 to 4 items. Analysis drafts are asked to name the records they rely on; when those records are missing, the rewrite says what it inferred from instead of presenting a guess as fact. A draft that is already specific is only de-duplicated and ordered, never flattened into generic wording.
+
+It **will not pick a stance for you**: it never adds "ask first", "assume the plan is wrong" or "give three variants" unless you wrote that yourself.
+
 ---
 
 ## Install
@@ -69,15 +73,18 @@ Install details and troubleshooting: **[DISTRIBUTION.en.md](DISTRIBUTION.en.md)*
 
 1. Type a prompt in the composer
 2. Click the sparkle button **to the left of the model selector**
-3. When it stops spinning the draft has been replaced, and a **rollback button** appears beside it
+3. When it stops spinning the draft has been replaced, and the sparkle button is **replaced by a rollback button**
 4. Not happy? Click rollback to restore the original
+
+> The two buttons never appear together: while a rollback button is shown the sparkle button is hidden, so a stray click cannot trigger a second enhancement.
 
 | Behaviour | Detail |
 |---|---|
-| Composer empty | Button is hidden |
-| You edit the draft | Rollback button disappears (your edit wins) |
-| Message sent | Rollback button disappears |
-| Consecutive enhancements | Only the most recent restore point is kept |
+| Composer empty | Neither button is shown |
+| After a successful enhancement | Only the rollback button is shown |
+| You edit the draft | Rollback button disappears, sparkle button returns (your edit wins) |
+| Message sent | Rollback button disappears, sparkle button returns |
+| After rolling back | Original restored, sparkle button returns |
 
 The slash command works too:
 
@@ -128,6 +135,8 @@ By default the current session model is used. To pin a model (for example, a fas
 
 Both fields are required; remove `config` to use the session model again.
 
+Since 1.1.2 there is a single mode and no switch to choose: one click, and the plugin decides how far to go from the draft itself (keep as-is / add structure / add analysis fields / add verification and rollback for risky work). The legacy `framework` / `skill` keys are still accepted for profile compatibility but have no effect.
+
 ---
 
 ## Token usage
@@ -150,7 +159,7 @@ dsh plugin --profile <profile> remove @jianyiagi/dsh-prompt-enhancer
 
 ## Changelog
 
-See **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**. Current version **1.1.1**.
+See **[CHANGELOG.md](dsh-prompt-enhancer/CHANGELOG.md)**. Current version **1.1.2**.
 
 ---
 
